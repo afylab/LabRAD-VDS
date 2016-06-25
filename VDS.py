@@ -43,6 +43,29 @@ class VirtualDeviceServer(LabradServer):
 		self.reg = self.client.registry # Easier registry access
 		yield self.initRegistry()       # Make sure the necessary registry structure is there
 
+		yield self.getChannelsFromRegistry() # Read all the channel info from the registry
+
+	@inlineCallbacks
+	def getChannelsFromRegistry(self):
+		"""Fetches all the channel info stored in the registry"""
+		self.channels = yield {}                # initiate channel info dict
+		yield self.reg.cd(self.channelLocation) # go to channel location
+		folders,files = yield self.reg.dir()
+		for channel in folders:
+			yield self.fetchChannelInfo(channel)
+		#print(self.channels)
+
+	@inlineCallbacks
+	def fetchChannelInfo(self,channel):
+		"""Updates self.channels with an entry for specified channel"""
+		yield self.reg.cd(self.channelLocation+[channel])
+		ch_name = yield self.reg.get('name')
+		ch_ID   = yield self.reg.get('ID')
+		ch_server,ch_device,ch_setting = yield self.reg.get('channel')
+		yield self.channels.update([
+			[channel,{'name':ch_name,'ID':ch_ID,'server':ch_server,'device':ch_device,'setting':ch_setting}]
+			])
+
 	@inlineCallbacks
 	def initRegistry(self):
 		"""Ensures that the registry has the appropriate location for channel information"""
@@ -115,6 +138,9 @@ class VirtualDeviceServer(LabradServer):
 		yield self.reg.set("offset",offset)     # Offset paramater. Applied before scaling.
 		yield self.reg.set("scale",scale)       # Scaling parameter. Applied after offset.
 
+		# Now add the new channel's info to self.channels
+		self.fetchChannelInfo(entryName)
+
 		# If we got this far it was a success, so return True
 		returnValue(True)
 		
@@ -143,6 +169,13 @@ class VirtualDeviceServer(LabradServer):
 
 		# Now we're done, so return True 
 		returnValue(True)
+
+	@setting(100,"Get Channels",returns='*s')
+	def getChannels(self,c):
+		channels = yield self.channels.keys()
+		returnValue(channels)
+
+	#@setting(101,"Get Channel Info",)
 
 
 __server__ = VirtualDeviceServer()
