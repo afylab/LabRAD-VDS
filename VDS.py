@@ -27,6 +27,19 @@ timeout = 20
 ### END NODE INFO
 """
 
+class serverInfo(object):
+	name = 'virtual_device_server'
+
+	serverNameAD5764_ACBOX      = 'ad5764_acbox'
+	serverNameAD5764_DCBOX      = 'ad5764_dcbox'
+	serverNameAD5780_QUAD_DCBOX = 'dcbox_quad_ad5780'
+
+	deviceNameAD5764_ACBOX      = '{serverName} ({port})' # these are to be formatted with the .format() command
+	deviceNameAd5764_DCBOX      = '{serverName} ({port})' # with the arguments (serverName, port)
+	deviceNameAd5780_QUAD_DCBOX = '{serverName} ({port})' # when the VDS needs to know the device name
+
+
+
 from labrad.server import LabradServer, setting
 from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
@@ -35,7 +48,8 @@ from labrad.types import Value
 class VirtualDeviceServer(LabradServer):
 	"""DESC_TEXT"""
 
-	name = 'Virtual Device Server'
+	info = serverInfo()
+	name = info.name
 	channelLocation = ['','VDS','channels']
 
 	@inlineCallbacks
