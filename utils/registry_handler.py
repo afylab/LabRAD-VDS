@@ -149,7 +149,7 @@ class registryHandler(object):
 		folders,files = self.reg.dir(context=self.context)
 		for folder in folders:
 			self.reg.cd(self.channelLocation+[folder],context=self.context)
-			attr.append(self.reg.get(attr,context=self.context))
+			attrs.append(self.reg.get(attr,context=self.context))
 		self.reg.cd(prevDir,context=self.context)
 		return attrs
 
@@ -175,7 +175,7 @@ class registryHandler(object):
 		self.reg.rmdir(folder,context=self.context)
 		self.reg.cd(prevDir,context=self.context)
 
-	def getChannelByNameID(self,ID=None,name=None):
+	def getFolderByNameID(self,ID=None,name=None):
 		if (ID==None) and (name==None):
 			raise ValueError("ID and name cannot both be None: at least one must be specified")
 
@@ -258,9 +258,12 @@ class registryHandler(object):
 		channel = self.getChannelByNameID(ID,name)
 		self.delFolder(channel)
 
-	def loadChannelFromRegistry(self,ID=None,name=None):
+	def loadChannelByNameID(self,ID=None,name=None):
+		channelFolder = self.getFolderByNameID(ID,name)
+		return self.loadChannel(channelFolder)
+
+	def loadChannel(self,channelFolder):
 		"""Loads a channel from the registry to a settingChannel object"""
-		channelFolder = self.getChannelByNameID(ID,name)
 
 		# go to channel folder
 		self.reg.cd(self.channelLocation+[channelFolder],context=self.context)
@@ -284,22 +287,36 @@ class registryHandler(object):
 
 		return settingChannel(ID,name,label,description,tags,channel,inputSlots,staticInputs,inputUnits,staticUnits,minValue,maxValue,scale,offset)
 
+	def loadAllChannels(self):
+		self.reg.cd(self.channelLocation,context=self.context)
+		folders,files=self.reg.dir(context=self.context)
+		channels = [self.loadChannel(channelFolder) for channelFolder in folders]
+		return {ch.ID:ch for ch in channels},{ch.name:ch for ch in channels}
+
 # if __name__ == '__main__':
 # 	with labrad.connect() as cxn:
 
 # 		# make registry handler with its own context
 # 		r = registryHandler(cxn,cxn.context())
 
-# 		#r.writeChannelToRegistry(
-# 		#	0,"AD5764 DCBox Eucalyptus Channel 0","DC0","Channel 0 of DCBOX AD5764 Eucalyptus",["test"],
-# 		#	['ad5764_dcbox','ad5764_dcbox (COM28)','set_voltage'],[1],[0],['f'],['i'],
-# 		#	[0.0],[4.0],[0.01],[2.0],
-# 		#	)
+# 		# r.writeChannelToRegistry(
+# 		# 	1,"AD5764 DCBox Eucalyptus Channel 1","DC1","Channel 1 of DCBOX AD5764 Eucalyptus",["test"],
+# 		# 	['ad5764_dcbox','ad5764_dcbox (COM28)','set_voltage'],[1],[1],['f'],['i'],
+# 		# 	[-1.0],[1.0],[0.001],[0.0],
+# 		# 	)
 
-# 		dc0  = r.loadChannelFromRegistry(ID=0)
+# 		#dc0  = r.loadChannelByNameID(ID=0)
+# 		#dc1  = r.loadChannelByNameID(ID=1)
+
+# 		byID,byName = r.loadAllChannels()
+
 # 		ctx0 = cxn.context()
+# 		ctx1 = cxn.context()
 
-# 		print(dc0.name)
-# 		print(dc0.channel)
+# 		print(byID)
+# 		print(byName)
 
-# 		dc0.callSetting([75],cxn,ctx0)
+# 		#byID[1].callSetting([675],cxn,ctx1)
+
+# 		#dc0.callSetting([75],cxn,ctx0)
+# 		#dc1.callSetting([125],cxn,ctx1)

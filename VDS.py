@@ -46,7 +46,7 @@ import labrad.units as units
 from labrad.types import Value
 
 class VirtualDeviceServer(LabradServer):
-	"""DESC_TEXT"""
+	"""Virtual Device Server.\nHandles usage of dedicated channels"""
 
 	info = serverInfo()
 	name = info.name
