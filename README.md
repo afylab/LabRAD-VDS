@@ -8,7 +8,7 @@ Not yet functioning
 - [x] Server runs
 - [x] registry structure present
 - [x] functions to add/remove channels to/from registry
-- [ ] getChannels function(s)
+- [x] list_channels functionality
 - [ ] setValue / getValue functions
 - [ ] Listeners/signals for valueChanged signals
 - [ ] Functions for reading / modifying channel details
