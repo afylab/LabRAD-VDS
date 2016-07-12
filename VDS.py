@@ -46,7 +46,6 @@ from labrad.server import LabradServer, setting
 from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
 from labrad.types import Value
-from utils.registry_handler import registryHandler
 
 ############################
 ## Setting Channel object ##
@@ -54,7 +53,7 @@ from utils.registry_handler import registryHandler
 class settingChannel(object):
     def __init__(
         self,
-        ID,           # i
+        ID,           # s
         name,         # s
         label,        # s
         description,  # s
@@ -382,9 +381,10 @@ class VirtualDeviceServer(LabradServer):
         offset   = yield self.reg.get("offset"  ,context=self.context)
 
         minValue = yield self.boundInterp(minValue) # These settings are stored as strings so that they can be either numbers or None (no constraints / scaling)
-        maxValue = yield self.boundInterp(minValue) # If they are interpretable as Nonetype ("None","none","-","") they will be set to None
-        scale    = yield self.boundInterp(minValue) # Otherwise they will be interpreted as a float
-        offset   = yield self.boundInterp(minValue) # 
+        maxValue = yield self.boundInterp(maxValue) # If they are interpretable as Nonetype ("None","none","-","") they will be set to None
+        scale    = yield self.boundInterp(scale)    # Otherwise they will be interpreted as a float
+        offset   = yield self.boundInterp(offset)   # 
+
 
         returnValue( settingChannel(ID,name,label,description,tags,channel,inputSlots,staticInputs,inputUnits,staticUnits,minValue,maxValue,scale,offset) )
 
@@ -458,6 +458,72 @@ class VirtualDeviceServer(LabradServer):
         keys = yield self.channelsByID.keys()
         returnValue([ [str(key),self.channelsByID[key].name] for key in keys])
 
+    @setting(500,"send channel request",ID='s',name='s',inputs='*s',context='*i',selectDevice='b',returns="?")
+    def sendChannelRequest(self,c,ID,name,inputs,context,selectDevice):
+        if ID:
+            ch = yield self.channelsByID[ID]
+        elif name:
+            ch = yield self.channelsByName[name]
+        else:
+            yield
+            raise ValueError("At least one of (ID,name) must be specified.")
+
+        nInputs=len(inputs)
+        if nInputs != ch.nNonStaticInputs:raise ValueError("number of inputs does not match number of inptut slots")
+
+        # if specified, select the device
+        if selectDevice:
+            if context != None: yield self.client[ch.channel[0]].select_device(ch.channel[1],context=context)
+            else              : yield self.client[ch.channel[0]].select_device(ch.channel[1])
+
+        # for zero inputs: just call the setting alone < setting() >
+        if ch.nTotalInputs == 0:
+            if context != None:
+                resp = yield self.client[ch.channel[0]][ch.channel[2]](context=context)
+            else:
+                resp = yield self.client[ch.channel[0]][ch.channel[2]]()
+            returnValue( resp )
+
+        # convert inputs and static inptus to specified types
+        _statics = []
+        for pos in range(ch.nStaticInputs):
+            val = yield toType(ch.staticInputs[pos],ch.staticUnits[pos])
+            _statics.append(val)
+
+        _nonstat = []
+        for pos in range(ch.nNonStaticInputs):
+            val = yield toType(inputs[pos],ch.inputUnits[pos])
+            _nonstat.append(val)
+
+        # apply offset and scale, enforce bounds
+        for pos in range(ch.nNonStaticInputs):
+            if ch.scale[pos]    != None : _nonstat[pos] *= ch.scale[pos]
+            if ch.offset[pos]   != None : _nonstat[pos] += ch.offset[pos]
+            if ch.minValue[pos] != None :
+                if _nonstat[pos] < ch.minValue[pos]:
+                    raise ValueError("Value deceeds minimum value <entry number: %s>, <minimum value: %s>, <value found: %s>, <offset: %s>, <scale: %s>"%(pos,ch.minValue[pos],_nonstat[pos],ch.offset[pos],ch.scale[pos]))
+            if ch.maxValue[pos] != None :
+                if _nonstat[pos] > ch.maxValue[pos]:
+                    raise ValueError("Value exceeds maximum value <entry number: %s>, <minimum value: %s>, <value found: %s>, <offset: %s>, <scale: %s>"%(pos,ch.minValue[pos],_nonstat[pos],ch.offset[pos],ch.scale[pos]))
+
+        # assemble input list
+        assembly = yield assembleList(ch.inputSlots,_nonstat,_statics)
+
+        # for one input: call the setting with that value < setting(value) >
+        if ch.nTotalInputs == 1:
+            if context != None:
+                resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly[0],context=context)
+            else:
+                resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly[0])
+            returnValue( resp )
+
+        # for multiple inputs, call the setting with the list of inputs < setting([inputs]) >
+        else:
+            if context != None:
+                resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly,context=context)
+            else:
+                resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly)
+            returnValue( resp )
 
 
 

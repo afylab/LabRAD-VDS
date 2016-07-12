@@ -9,7 +9,7 @@ Not yet functioning
 - [x] registry structure present
 - [x] functions to add/remove channels to/from registry
 - [x] list_channels functionality
-- [ ] setValue / getValue functions
+- [x] Send channel request function
 - [ ] Listeners/signals for valueChanged signals
 - [ ] Functions for reading / modifying channel details
 - [ ] Determine which channels are active
