@@ -421,7 +421,7 @@ class VirtualDeviceServer(LabradServer):
         offset       = '*s', # """
 
         returns      = 'b{success}')
-    def addChannel(self,c,ID,name,label,description,tags,channel,inputSlots,staticInputs,inputUnits,staticUnits,minValue,maxValue,scale,offset):
+    def addChannel(self,c,ID,name,label,description,tags,channel,inputSlots,staticInputs,inputUnits,staticUnits,minValue, maxValue, scale, offset):
         """Adds a new channel to the registry.\nDoesn't overwrite; to overwrite you must delete the old channel first."""
 
         # Check that all values in min,max,scale,offset are float-interpretable OR nonetype
@@ -430,7 +430,7 @@ class VirtualDeviceServer(LabradServer):
             if inst.lower() in self.noneTypes:
                 continue
             try:
-                _=float(inst)
+                float(inst)
             except:
                 raise ValueError("Value (%s) for minValue,maxValue,scale,offset not interpetable as either float or NoneType"%inst)
 
@@ -468,17 +468,20 @@ class VirtualDeviceServer(LabradServer):
             yield
             raise ValueError("At least one of (ID,name) must be specified.")
 
+        # empty context -> None
+        if len(context)==0:context=None
+
         nInputs=len(inputs)
         if nInputs != ch.nNonStaticInputs:raise ValueError("number of inputs does not match number of inptut slots")
 
         # if specified, select the device
         if selectDevice:
-            if context != None: yield self.client[ch.channel[0]].select_device(ch.channel[1],context=context)
-            else              : yield self.client[ch.channel[0]].select_device(ch.channel[1])
+            if not (context is None): yield self.client[ch.channel[0]].select_device(ch.channel[1],context=context)
+            else                    : yield self.client[ch.channel[0]].select_device(ch.channel[1])
 
         # for zero inputs: just call the setting alone < setting() >
         if ch.nTotalInputs == 0:
-            if context != None:
+            if not (context is None):
                 resp = yield self.client[ch.channel[0]][ch.channel[2]](context=context)
             else:
                 resp = yield self.client[ch.channel[0]][ch.channel[2]]()
@@ -511,7 +514,7 @@ class VirtualDeviceServer(LabradServer):
 
         # for one input: call the setting with that value < setting(value) >
         if ch.nTotalInputs == 1:
-            if context != None:
+            if not (context is None):
                 resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly[0],context=context)
             else:
                 resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly[0])
@@ -519,7 +522,7 @@ class VirtualDeviceServer(LabradServer):
 
         # for multiple inputs, call the setting with the list of inputs < setting([inputs]) >
         else:
-            if context != None:
+            if not (context is None):
                 resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly,context=context)
             else:
                 resp = yield self.client[ch.channel[0]][ch.channel[2]](assembly)

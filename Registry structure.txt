@@ -1,0 +1,37 @@
+Registry structure
+
+ID (name)
+	
+	ID				ID of the channel.   Unique positive  integer.
+	name			Name of the channel. Unique non-empty string.
+					For accessing by ID/name:
+						Unspecified ID   is interpreted from -1 (or any negative integer, but -1 is typically used)
+						Unspecified name is interpreted from ""
+
+	label			Default channel label for graph axes
+	description		Description of the channel (string.)
+	tags			List of tags, for organizing/searching channels
+	hasGet			bool - whether or not the channel has get() functionality
+	hasSet			bool - whether or not the channel has set() functionality
+
+					Example of channel with get() but not set(): digital multimeter voltage readout (only for measuring)
+					Example of channel with set() but not get(): voltage output of a device that doesn't have a get_voltage() command
+					Example of channel with set() and     get(): voltage output of a device that does    have a get_voltage() command
+
+	get
+		setting			[server, device, setting] : points to the setting used for the get() command
+		inputs 			List of input values for the get() command
+		inputsUnits		List of corresponding units
+
+	set
+		setting			[server, device, setting] : points to the setting used for the set() command
+		varSlot			which input position is the variable input (what the channel is being set to)
+		varUnits		What units the variable input assumes. Always float? If so this property isn't needed
+		statics 		List of static input values
+		staticsUnits	List of corresponding units of the static values
+
+		min			Minimum value of channel for set() function
+		max			Maximum value of channel for set() function
+		offset		Actual value set is centered around this value
+		scale		Actual value set is scaled by this factor
+					Actual = (Input * scale) + offset
