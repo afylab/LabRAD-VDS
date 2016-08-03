@@ -16,7 +16,7 @@
 ### BEGIN NODE INFO
 [info]
 name = Virtual Device Server
-version = 1.0
+version = 0.2
 description = Virtual Device Server for LabRAD. Handles dedicated output channels
 [startup]
 cmdline = %PYTHON% %FILE%
@@ -26,21 +26,6 @@ message = 987654321
 timeout = 20
 ### END NODE INFO
 """
-
-class serverInfo(object):
-    name = 'virtual_device_server'
-
-    serverNameAD5764_ACBOX      = 'ad5764_acbox'
-    serverNameAD5764_DCBOX      = 'ad5764_dcbox'
-    serverNameAD5780_QUAD_DCBOX = 'dcbox_quad_ad5780'
-
-    deviceNameAD5764_ACBOX      = '{serverName} ({port})' # these are to be formatted with the .format() command
-    deviceNameAd5764_DCBOX      = '{serverName} ({port})' # with the arguments (serverName, port)
-    deviceNameAd5780_QUAD_DCBOX = '{serverName} ({port})' # when the VDS needs to know the device name
-
-
-
-
 
 from labrad.server import LabradServer, setting
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -183,9 +168,11 @@ def assembleList(inputSlots,inputs,statics):
 
 
 class VirtualDeviceServer(LabradServer):
-    """Virtual Device Server.\nHandles usage of dedicated channels"""
-    info            = serverInfo()
-    name            = info.name
+    """
+    Virtual Device Server.
+    Handles usage of dedicated channels
+    """
+    name = 'virtual_device_server'
     channelLocation = ['','VDS','channels']
     noneTypes       = ['none','-','']
 
@@ -210,6 +197,7 @@ class VirtualDeviceServer(LabradServer):
 
     @inlineCallbacks
     def getAttrs(self,attr):
+        """Gets a list of all the channels' values for a specified attribute"""
         prevDir = yield self.reg.cd(context=self.context)
         attrs   = []
         yield self.reg.cd(self.channelLocation,context=self.context)
@@ -223,6 +211,7 @@ class VirtualDeviceServer(LabradServer):
 
     @inlineCallbacks
     def getFolderByAttr(self,attr,value):
+        """Find a channel by its value for a particular attribute"""
         prevDir = yield self.reg.cd(context=self.context)
         appFolders = []
         yield self.reg.cd(self.channelLocation,context=self.context)
@@ -236,6 +225,7 @@ class VirtualDeviceServer(LabradServer):
 
     @inlineCallbacks
     def delFolder(self,folder):
+        """Deletes a channel folder, specified by folder name"""
         prevDir = yield self.reg.cd(context=self.context)
         yield self.reg.cd(self.channelLocation+[folder],context=self.context)
         folders,files = yield self.reg.dir(context=self.context)
@@ -250,6 +240,10 @@ class VirtualDeviceServer(LabradServer):
 
     @inlineCallbacks
     def getFolderByNameID(self,ID=None,name=None):
+        """Get the name of a folder by specifying its name and/or ID
+        Must specify at least one of name,ID
+        If both are specified, they must point to the same folder
+        """
         yield
 
         if (ID==None) and (name==None):
@@ -298,6 +292,7 @@ class VirtualDeviceServer(LabradServer):
         scale,        # *v
         offset,       # *v
         ):
+        """Creates a registry entry for a channel"""
 
         # go to channel storage location
         yield self.reg.cd(self.channelLocation,True,context=self.context)
@@ -340,12 +335,14 @@ class VirtualDeviceServer(LabradServer):
 
     @inlineCallbacks
     def loadChannelByNameID(self,ID=None,name=None):
+        """Loads info from the registry to a channel object, specified by ID and/or name"""
         channelFolder = yield self.getFolderByNameID(ID,name)
         channel       = yield self.loadChannel(channelFolder)
         returnValue( channel )
 
     @inlineCallbacks
     def boundInterp(self,boundList):
+        """Converts 'none' or empty strings into None"""
         newList = []
         for inst in boundList:
             low=yield inst.lower()
@@ -390,6 +387,7 @@ class VirtualDeviceServer(LabradServer):
 
     @inlineCallbacks
     def loadAllChannels(self):
+        """Loads all channels from the registry and return dicts of ID:"""
         yield self.reg.cd(self.channelLocation,context=self.context)
         folders,files=yield self.reg.dir(context=self.context)
         channels = []

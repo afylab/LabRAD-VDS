@@ -6,7 +6,7 @@ ID (name)
 	name			Name of the channel. Unique non-empty string.
 					For accessing by ID/name:
 						Unspecified ID   is interpreted from -1 (or any negative integer, but -1 is typically used)
-						Unspecified name is interpreted from ""
+						Unspecified name is interpreted from "" (an empty string)
 
 	label			Default channel label for graph axes
 	description		Description of the channel (string.)
