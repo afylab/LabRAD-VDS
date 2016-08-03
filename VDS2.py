@@ -452,7 +452,17 @@ class VirtualDeviceServer(LabradServer):
 		"""Deletes a channel specified by name, ID, or both"""
 		if not ID  : ID   = None
 		if not name: name = None
+
+		if (ID == None) and (name == None):raise ValueError("Error: <ID> and <name> cannot both be None or empty")
+
+		if ID   == None: ID   = self.channels_by_name[name].ID
+		if name == None: name = self.channels_by_id[ID].name
+
 		yield self.del_channel_from_registry(ID,name)
+
+		del self.channels_by_name[name]
+		del self.channels_by_id[ID]	
+
 		returnValue(True)
 
 	@setting(100,"list channels",returns='**s')
