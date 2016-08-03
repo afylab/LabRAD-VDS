@@ -325,6 +325,8 @@ class VirtualDeviceServer(LabradServer):
 		get_setting      = yield self.reg.get("setting",      context=self.reg_context)
 		get_inputs       = yield self.reg.get("inputs",       context=self.reg_context)
 		get_inputs_units = yield self.reg.get("inputs_units", context=self.reg_context)
+		get_inputs = [to_type(get_inputs[n],get_inputs_units[n]) for n in range(len(get_inputs))] # convert get_inputs to specified types
+
 
 		# <set> folder
 		yield self.reg.cd(self.channel_location+[channel_folder,"set"],context=self.reg_context)
@@ -337,6 +339,7 @@ class VirtualDeviceServer(LabradServer):
 		set_max           = yield self.reg.get("max",           context=self.reg_context)
 		set_offset        = yield self.reg.get("offset",        context=self.reg_context)
 		set_scale         = yield self.reg.get("scale",         context=self.reg_context)
+		set_statics = [to_type(set_statics[n],set_statics_units[n]) for n in range(len(set_statics))] # convert statics to specified types
 
 		set_min    = yield self.bound_interp(set_min   ) # These are stored as strings in the regsitry
 		set_max    = yield self.bound_interp(set_max   ) # but we need them to be <None> if appropriate
@@ -470,6 +473,62 @@ class VirtualDeviceServer(LabradServer):
 		keys = yield self.channels_by_id.keys()
 		returnValue([ [str(key),self.channels_by_id[key].name] for key in keys])
 
+
+
+
+
+
+
+
+	@setting(1000,"set channel",ID='s',name='s',value='f')
+	def set_channel(self,c,ID,name,value):
+
+		# How do we tell if a channel is active? Corresponding server, and corresponding device
+		# Error if accesing inactive channel?
+		# Setting for getting a list of active channels as opposed to all channels?
+		
+		if not ID  : ID   = None
+		if not name: name = None
+		if (ID == None) and (name == None):raise ValueError("ID and name can't both be None or empty")
+
+		if not (ID is None):
+			try:
+				channel = self.channels_by_id[ID]
+			except:
+				raise ValueError("Invalid ID: {ID}; does not correspond to any channel.".format(ID=ID))
+		else:
+			try:
+				channel = self.channels_by_name[name]
+			except:
+				raise ValueError("Invalid name: {name}; does not correspond to any channel.".format(name=name))
+
+		set_var_value = (value * channel.set_scale) + channel.set_offset
+		if set_var_value > channel.set_max:raise ValueError("value set (raw:{value}, adjusted:{set_var_value}) exceeds max value:{max}".format(value=value,set_var_value=set_var_value,max=channel.set_max))
+		if set_var_value < channel.set_min:raise ValueError("value set (raw:{value}, adjusted:{set_var_value}) deceeds min value:{min}".format(value=value,set_var_value=set_var_value,min=channel.set_min))
+
+		if len(channel.set_statics) == 0:
+			try: # first we try to send the setting in the channel's context.
+				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](value,context=channel.context)
+			except: # if it fails we try selecting the device & sending the request again
+				yield self.client[channel.set_setting[0]].select_device(channel.set_setting[1],context=channel.context)
+				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](value,context=channel.context)
+				# if it fails here we don't catch it, as it failed for a reason other than
+				# not being selected, and we want the user to see the error message.
+		else:
+			inputs = assemble_set_list(channel.set_var_slot,value,channel.set_statics)
+			try:
+				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](inputs,context=channel.context)
+			except:
+				yield self.client[channel.set_setting[0]].select_device(channel.set_setting[1],context=channel.context)
+				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](inputs,context=channel.context)
+
+	returnValue(ret)
+
+
+
+	@setting(1001,"get channel",ID='s',name='s')
+	def get_channel(self,c,ID):
+		pass
 
 
 
