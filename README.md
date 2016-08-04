@@ -9,17 +9,10 @@ Not yet functioning
 - [x] registry structure present
 - [x] functions to add/remove channels to/from registry
 - [x] list_channels functionality
-- [x] Send channel request function
-- [ ] Listeners/signals for valueChanged signals
+- [x] set_channel
+- [x] get_channel
+- [x] signals for get/set and add/del
+- [ ] list_active_channels function (lists channels whose server & device are active)
 - [ ] Functions for reading / modifying channel details
-- [ ] Determine which channels are active
-- [ ] Signals for channels opening/closing?
-
-VDS2 is the new version being developed; it has the new registry structure where a channel has a get and/or set command.
-
-### progress of VDS2
-- [x] registry structure
-- [x] create/delete registry objects
-- [x] read & load channels from registry
-- [ ] send get and set commands
-- [ ] detect which channels are active
+- [ ] Signals for channels opening/closing
+- [ ] Generate settings & signals for individual channels (if possible)
