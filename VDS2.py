@@ -27,7 +27,7 @@ timeout = 20
 ### END NODE INFO
 """
 
-from labrad.server import LabradServer, setting
+from labrad.server import LabradServer, setting, Signal
 from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
 from labrad.types import Value
@@ -120,18 +120,24 @@ class VirtualDeviceServer(LabradServer):
 	Handles usage of dedicated channels
 	"""
 
-	name             = 'virtual_device_server'				 # server name (as appears in pylabrad connections)
+	name             = 'virtual_device_server'                 # server name (as appears in pylabrad connections)
 	channel_location = ['','virtual_device_server','channels'] # registry location of channel information
-	none_types       = ['none','-','']						 # these strings will be interpreted as <None> by the VDS
+	none_types       = ['none','-','']                         # these strings will be interpreted as <None> by the VDS
 
 	channels_by_id   = {} # These start out empty
 	channels_by_name = {} # And will be populated on server init
 
+	sPrefix = 704000
+	signal__reg_channel_added   = Signal(sPrefix+0,"signal__reg_channel_added" , "*s") # Activated when a new channel is added; parameters = [ID,name]
+	signal__reg_channel_deleted = Signal(sPrefix+1,"signal__reg_chanel_deleted", "*s") # Activated when a channel is deleted  ; parameters = [ID,name]
+	signal__channel_set         = Signal(sPrefix+2,"signal__channel_set"       , "*s") # Activated when a channel is set      ; parameters = [ID,name,response]
+	signal__channel_get         = Signal(sPrefix+3,"signal__channel_get"       , "(ssv)") # Activated when a channel is gotten   ; parameters = [ID,name,response]
+
 	@inlineCallbacks
 	def initServer(self):
-		self.reg		 = self.client.registry  # more convenient connection to the registry
+		self.reg         = self.client.registry  # more convenient connection to the registry
 		self.reg_context = self.client.context() # context for registry operations
-		yield self.registry_setup()			  # set up the registry directory if it hasn't been already
+		yield self.registry_setup()              # set up the registry directory if it hasn't been already
 		self.channels_by_id,self.channels_by_name = yield self.load_all_channels()
 
 	#######################
@@ -388,12 +394,45 @@ class VirtualDeviceServer(LabradServer):
 		else:
 			returnValue(float(bound))
 
+	#######################
+	## Channel functions ##
+	#######################
+
+	@inlineCallbacks
+	def get_channel_by_id_name(self,ID=None,name=None):
+		"""Returns a channel specified by name and/or ID"""
+		yield
+		if not ID  : ID   = None
+		if not name: name = None
+		if (ID == None) and (name == None):raise ValueError("ID and name can't both be None or empty")
+
+		if not (ID is None):
+			try:
+				by_id = self.channels_by_id[ID]
+			except:
+				raise ValueError("Invalid ID: {ID}; does not correspond to any channel.".format(ID=ID))
+		if not (name is None):
+			try:
+				by_name = self.channels_by_name[name]
+			except:
+				raise ValueError("Invalid name: {name}; does not correspond to any channel.".format(name=name))
+
+		if ID == None:        # If user only specifies name,
+			channel = by_name # get channel by the name.
+		elif name == None:    # If user only specifies ID,
+			channel = by_id   # get channel by the ID.
+		else:                 # If user specifies both, make sure they both validly point to the same channel.
+			if by_id.ID   != by_name.ID   : raise ValueError("Name and ID point to different channels. If both specified they must point to the same channel.")
+			if by_id.name != by_name.name : raise ValueError("Name and ID point to different channels. If both specified they must point to the same channel.")
+			channel = by_id   # now that we know they point to the same channel, just set it to by_id
+
+		returnValue(channel)
 
 	##############
 	## Settings ##
 	##############
 
-	@setting(1,"add channel",
+	@setting(1,"reg add channel",
 		ID                = 's',
 		name              = 's',
 		label             = 's',
@@ -415,7 +454,7 @@ class VirtualDeviceServer(LabradServer):
 		set_scale         = 's',  # floats or None types.
 
 		returns = 'b{success}')
-	def add_channel(self, c, ID, name, label, description, tags, has_get, has_set, get_setting, get_inputs, get_inputs_units, set_setting, set_var_slot, set_var_units, set_statics, set_statics_units, set_min, set_max, set_offset, set_scale):
+	def reg_add_channel(self, c, ID, name, label, description, tags, has_get, has_set, get_setting, get_inputs, get_inputs_units, set_setting, set_var_slot, set_var_units, set_statics, set_statics_units, set_min, set_max, set_offset, set_scale):
 		"""Adds a new channel to the regsitry.\nDoes not override; to overwrite, first delete the old channel."""
 
 		# make sure ID is valid
@@ -448,10 +487,11 @@ class VirtualDeviceServer(LabradServer):
 		self.channels_by_name.update([ [name, channel] ])
 
 		# done & succesful
+		self.signal__reg_channel_added([ID,name])
 		returnValue(True)
 
-	@setting(2,"del channel",ID='s',name='s',returns='b{success}')
-	def del_channel(self,c,ID,name):
+	@setting(2,"reg del channel",ID='s',name='s',returns='b{success}')
+	def reg_del_channel(self,c,ID,name):
 		"""Deletes a channel specified by name, ID, or both"""
 		if not ID  : ID   = None
 		if not name: name = None
@@ -466,41 +506,41 @@ class VirtualDeviceServer(LabradServer):
 		del self.channels_by_name[name]
 		del self.channels_by_id[ID]	
 
+		self.signal__reg_chanel_deleted([ID,name])
 		returnValue(True)
 
 	@setting(100,"list channels",returns='**s')
 	def list_channels(self,c):
+		"""Returns a list of all channels in the registry in the form [ [ID,name], [ID,name], ... ]"""
 		keys = yield self.channels_by_id.keys()
 		returnValue([ [str(key),self.channels_by_id[key].name] for key in keys])
 
+	#@setting(101,"list active channels",returns='**s')
+	#def list_active_channel(self,c):
+	#	yield
 
+	#@setting(102,"channel details",ID='s',name='s',returns='**s')
+	#def channel_details(self,c,ID,name):
+	#	"""Returns the details of a given channel in the form of a list [ [attribute, value], [attribute, value], ... ]"""
+	#	channel = yield self.get_channel_by_id_name(ID,name)
 
-
-
-
-
-
-	@setting(1000,"set channel",ID='s',name='s',value='f')
+	@setting(1000,"set channel",ID='s',name='s',value='v',returns='s{response}')
 	def set_channel(self,c,ID,name,value):
+		"""Set the output of a channel. \nChanel specified by name and/or ID. \nOutput specified by value"""
 
 		# How do we tell if a channel is active? Corresponding server, and corresponding device
 		# Error if accesing inactive channel?
 		# Setting for getting a list of active channels as opposed to all channels?
+		# 
+		# Should get and set both have server & device
+		# or should server & device be shared, and get/set only specify settings?
+		# for now assume server & device are the same between get & set
+		# could cause problems (wrong thing being set) if set & get have different devices, as set & get share the same context
 		
-		if not ID  : ID   = None
-		if not name: name = None
-		if (ID == None) and (name == None):raise ValueError("ID and name can't both be None or empty")
+		channel = yield self.get_channel_by_id_name(ID,name)
 
-		if not (ID is None):
-			try:
-				channel = self.channels_by_id[ID]
-			except:
-				raise ValueError("Invalid ID: {ID}; does not correspond to any channel.".format(ID=ID))
-		else:
-			try:
-				channel = self.channels_by_name[name]
-			except:
-				raise ValueError("Invalid name: {name}; does not correspond to any channel.".format(name=name))
+		if not channel.has_set:
+			raise ValueError("Tried to set_channel on a channel that does not support set commands")
 
 		set_var_value = (value * channel.set_scale) + channel.set_offset
 		if set_var_value > channel.set_max:raise ValueError("value set (raw:{value}, adjusted:{set_var_value}) exceeds max value:{max}".format(value=value,set_var_value=set_var_value,max=channel.set_max))
@@ -508,29 +548,53 @@ class VirtualDeviceServer(LabradServer):
 
 		if len(channel.set_statics) == 0:
 			try: # first we try to send the setting in the channel's context.
-				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](value,context=channel.context)
+				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](set_var_value,context=channel.context)
 			except: # if it fails we try selecting the device & sending the request again
 				yield self.client[channel.set_setting[0]].select_device(channel.set_setting[1],context=channel.context)
-				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](value,context=channel.context)
+				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](set_var_value,context=channel.context)
 				# if it fails here we don't catch it, as it failed for a reason other than
 				# not being selected, and we want the user to see the error message.
 		else:
-			inputs = assemble_set_list(channel.set_var_slot,value,channel.set_statics)
+			inputs = assemble_set_list(channel.set_var_slot,set_var_value,channel.set_statics)
 			try:
 				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](inputs,context=channel.context)
 			except:
 				yield self.client[channel.set_setting[0]].select_device(channel.set_setting[1],context=channel.context)
 				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](inputs,context=channel.context)
 
-	returnValue(ret)
+		self.signal__channel_set([channel.ID,channel.name,str(ret)])
+		returnValue(str(ret))
 
+	@setting(1001,"get channel",ID='s',name='s',returns='v{value}')
+	def get_channel(self,c,ID,name):
+		"""Gets the value (input or set output) of a channel. \nChannel specified by name and/or ID"""
+		channel = yield self.get_channel_by_id_name(ID,name)
+		if not channel.has_get:
+			raise ValueError("Tried to get_channel on a channel that does not support get commands")
 
+		if len(channel.get_inputs) == 0: # If there are no inputs required, then 
+			try:                         # we call the setting with context only (no inputs)
+				ret = yield self.client[channel.get_setting[0]][channel.get_setting[2]](context=channel.context)
+			except:
+				yield self.client[channel.get_setting[0]].select_device(channel.get_setting[1],context=channel.context)
+				ret = yield self.client[channel.get_setting[0]][channel.get_setting[2]](context=channel.context)
 
-	@setting(1001,"get channel",ID='s',name='s')
-	def get_channel(self,c,ID):
-		pass
+		elif len(channel.get_inputs) == 1: # If there's exactly one input required then
+			try:                           # we call the setting with (input, context)
+				ret = yield self.client[channel.get_setting[0]][channel.get_setting[2]](channel.get_inputs[0],context=channel.context)
+			except:
+				yield self.client[channel.get_setting[0]].select_device(channel.get_setting[1],context=channel.context)
+				ret = yield self.client[channel.get_setting[0]][channel.get_setting[2]](channel.get_inputs[0],context=channel.context)
 
+		else:    # multiple inputs required, then they can be given as a list
+			try: # so we call the setting with ([inputs...], context)
+				ret = yield self.client[channel.get_setting[0]][channel.get_setting[2]](channel.get_inputs,context=channel.context)
+			except:
+				ret = yield self.client[channel.get_setting[0]][channel.get_setting[2]](channel.get_inputs,context=channel.context)
+				yield self.client[channel.get_setting[0]].select_device(channel.get_setting[1],context=channel.context)
 
+		self.signal__channel_get([channel.ID,channel.name,float(ret)])
+		returnValue(float(ret))
 
 
 
