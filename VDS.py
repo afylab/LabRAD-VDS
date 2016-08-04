@@ -91,10 +91,10 @@ class ChannelInstance(object):
 			self.set_offset		= set_offset
 			self.set_scale		 = set_scale
 
-	def __repr__(self):
-		return """Channel Instance Object with < ID:{ID} name:{name} >\n\n{description}""".format(ID=self.ID,name=self.name,description=self.description)
-	def __str__(self):
-		return """Channel Instance Object with < ID:{ID} name:{name} >\n\n{description}""".format(ID=self.ID,name=self.name,description=self.description)
+	#def __repr__(self):
+	#	return """Channel Instance Object with < ID:{ID} name:{name} >\n\n{description}""".format(ID=self.ID,name=self.name,description=self.description)
+	#def __str__(self):
+	#	return """Channel Instance Object with < ID:{ID} name:{name} >\n\n{description}""".format(ID=self.ID,name=self.name,description=self.description)
 
 ###############################
 ## Formatting/data functions ##
@@ -122,7 +122,7 @@ class VirtualDeviceServer(LabradServer):
 
 	name             = 'virtual_device_server'                 # server name (as appears in pylabrad connections)
 	channel_location = ['','virtual_device_server','channels'] # registry location of channel information
-	none_types       = ['none','-','']                         # these strings will be interpreted as <None> by the VDS
+	none_types       = ['none','None','-','']                         # these strings will be interpreted as <None> by the VDS
 
 	channels_by_id   = {} # These start out empty
 	channels_by_name = {} # And will be populated on server init
@@ -386,6 +386,14 @@ class VirtualDeviceServer(LabradServer):
 		returnValue([{channel.ID:channel for channel in channels},{channel.name:channel for channel in channels}])
 
 	@inlineCallbacks
+	def reg_modify(self,channel_folder,attribute,new_value,subfolder=None):
+		prev_dir = yield self.reg.cd(context=self.reg_context)
+		yield self.reg.cd(self.channel_location+[channel_folder],context=self.reg_context)
+		if subfolder:yield self.reg.cd(subfolder,context=self.reg_context)
+		yield self.reg.set(attribute,new_value,context=self.reg_context)
+		yield self.reg.cd(prev_dir,context=self.reg_context)
+
+	@inlineCallbacks
 	def bound_interp(self,bound):
 		"""Converts none-interpretable strings into None types, and all other strings to floats"""
 		low = yield bound.lower()
@@ -491,7 +499,7 @@ class VirtualDeviceServer(LabradServer):
 		returnValue(True)
 
 	@setting(2,"reg del channel",ID='s',name='s',returns='b{success}')
-	def reg_del_channel(self,c,ID,name):
+	def reg_del_channel(self,c,ID,name=""):
 		"""Deletes a channel specified by name, ID, or both"""
 		if not ID  : ID   = None
 		if not name: name = None
@@ -519,13 +527,121 @@ class VirtualDeviceServer(LabradServer):
 	#def list_active_channel(self,c):
 	#	yield
 
-	#@setting(102,"channel details",ID='s',name='s',returns='**s')
-	#def channel_details(self,c,ID,name):
-	#	"""Returns the details of a given channel in the form of a list [ [attribute, value], [attribute, value], ... ]"""
-	#	channel = yield self.get_channel_by_id_name(ID,name)
+	@setting(102,"list channel details",ID='s',name='s',returns='(ssss*sbb*s*?*s*sis*?*svvvv)')
+	def list_channel_details(self,c,ID,name=""):
+		"""Returns the details of a given channel in the form of a list (ID,name,label,description,tags,has_get,has_set,get_setting,get_inputs,get_inputs_units,set_setting,ste_var_slot,set_var_units,set_statics,set_statics_units,set_min,set_max,set_offset,set_scale)"""
+		channel = yield self.get_channel_by_id_name(ID,name)
+		returnValue([
+			channel.ID,
+			channel.name,
+			channel.label,
+			channel.description,
+			channel.tags,
+			channel.has_get,
+			channel.has_set,
+			channel.get_setting,
+			channel.get_inputs,
+			channel.get_inputs_units,
+			channel.set_setting,
+			channel.set_var_slot,
+			channel.set_var_units,
+			channel.set_statics,
+			channel.set_statics_units,
+			channel.set_min,
+			channel.set_max,
+			channel.set_offset,
+			channel.set_scale,
+			])
+
+	@setting(103,"modify channel details",modifications='*(s?)',ID='s',name='s',returns='b{success}')
+	def modify_channel_details(self,c,modifications,ID,name=""):
+		"""Modify the attributes of a channel. modifications = [ [attribute, new_value], ... ] Example: [['set_min',0],['set_max',1]] will change the enforced lower bound for the set() command to 0, and the upper bound to 1."""
+		channel  = yield self.get_channel_by_id_name(ID,name)
+		ch_attrs = yield channel.__dict__.keys() # list of ChannelInstance attributes
+
+		# make sure that all attribute changes are valid (valid attribute, and correct data type)
+		typed_modifications = []
+		for mod in modifications: 
+			attr    = mod[0]
+			new_val = mod[1]
+
+			# make sure the attribute is a valid attribute
+			if not (attr in ch_attrs):
+				raise ValueError("Invalid attribute specified. Was <{attr}>; valid attributes are <{ch_attrs}>".format(attr=attr,ch_attrs=ch_attrs))
+
+			cur_val      = yield channel.__getattribute__(attr)
+			new_val_type = yield type(new_val)
+			cur_val_type = yield type(cur_val)
+
+			try:
+				if cur_val_type is new_val_type:            # same types is A-OK
+					typed_modifications += [[attr,new_val]] # add to the new list of typed modifications
+				else:
+					new_val = cur_val_type(new_val)         # Test if types are compatible
+					typed_modifications += [[attr,new_val]] # Add the retyped modification to the list of typed modifications
+			except:
+				raise ValueError("Incompatible types or uninterpretable data for attribute <{attr}>; current is ({cur_val}, type {cur_val_type}), new is ({new_val}, type {new_val_type})".format(attr=attr,cur_val=cur_val,cur_val_type=cur_val_type,new_val=new_val,new_val_type=new_val_type))
+
+
+			# For now changing name or ID with this method is not allowed.
+			# This is because we would have to change the name of the folder in the registry, which is not a simple task.
+			# It's on the to-do list
+			if attr in ['ID','name']:
+				raise ValueError("Cannot change ID or name yet with this method. If you wish to change the ID and/or name, you must delete the channel and create a new one. You will be able to change ID / name with this command in the future.")
+
+			# for ID and name, they still need to be unique
+			if attr in ['ID','name']:
+				existing_values = yield self.get_attributes(attr)
+				if new_val in existing_values:
+					raise ValueError("Tried to change <{attr}> to value <{new_val}>, which is already taken. ({attr} must be unique. Taken values: {existing_values})".format(attr=attr,new_val=new_val,existing_values=existing_values))
+
+
+
+		# all the modifications in typed_modifications must be valid, so we may continue
+		for mod in typed_modifications:
+
+			# modify the attribute of the ChannelInstance object
+			if not (mod[0] in ['ID','name']):
+				channel.__setattr__(mod[0],mod[1])
+			else:
+				# If we change the name and/or ID we have to be careful and update the channels_by_id and channels_by_name dicts
+				del self.channels_by_name[channel.name] # begin by removing the channel from both dictionaries
+				del self.channels_by_id[channel.ID]     # before modifying the channel's name or ID
+				channel.__setattr__(mod[0],mod[1])      # Now that the channel is free, we can modify the name and ID
+				self.channels_by_name.update([ [channel.name,channel] ]) # now we re-attach it to the dictionaries
+				self.channels_by_id.update([   [channel.ID  ,channel] ]) # under its new name / ID
+				# For now this block never runs as we forbind changing namd/ID
+				# When that is changed we will have to be careful as we are also changing the registry structure
+				# since the folder is named <ID (name)> we change the registry folder name when we change name or ID
+
+			# updating the registry
+			channel_folder = yield self.get_folder_by_id_name(channel.ID,channel.name)
+
+			# no subfolder items
+			if mod[0] in ["ID","name","label","description","tags","has_get","has_set"]:
+				yield self.reg_modify(channel_folder,mod[0],mod[1])
+
+			# <get> subfolder items
+			if mod[0].startswith('get_'):
+				if mod[0] == 'get_inputs': # inputs are stored as strings in the regsitry regardless of final type, so we convert them before writing
+					yield self.reg_modify(channel_folder,mod[0][4:],[str(obj) for obj in mod[1]],subfolder='get')
+				else:
+					yield self.reg_modify(channel_folder,mod[0][4:],mod[1],subfolder='get')
+
+			# <set> subfolder items
+			if mod[0].startswith('set_'):
+				if mod[0] == 'set_statics': # statics (inputs) stored as strings, as above.
+					yield self.reg_modify(channel_folder,mod[0][4:],[str(obj) for obj in mod[1]],subfolder='set')
+				elif mod[0] in ['set_min','set_max','set_offset','set_scale']: # these are also stored as strings, but individual strings not lists of strings
+					yield self.reg_modify(channel_folder,mod[0][4:],str(mod[1]),subfolder='set')
+				else:
+					yield self.reg_modify(channel_folder,mod[0][4:],mod[1],subfolder='set')
+
+		# if we got this far we were successful
+		returnValue(True)
 
 	@setting(1000,"set channel",ID='s',name='s',value='v',returns='s{response}')
-	def set_channel(self,c,ID,name,value):
+	def set_channel(self,c,value,ID,name=""):
 		"""Set the output of a channel. \nChanel specified by name and/or ID. \nOutput specified by value"""
 
 		# How do we tell if a channel is active? Corresponding server, and corresponding device
@@ -566,7 +682,7 @@ class VirtualDeviceServer(LabradServer):
 		returnValue(str(ret))
 
 	@setting(1001,"get channel",ID='s',name='s',returns='v{value}')
-	def get_channel(self,c,ID,name):
+	def get_channel(self,c,ID,name=""):
 		"""Gets the value (input or set output) of a channel. \nChannel specified by name and/or ID"""
 		channel = yield self.get_channel_by_id_name(ID,name)
 		if not channel.has_get:
