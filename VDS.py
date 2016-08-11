@@ -129,7 +129,7 @@ class VirtualDeviceServer(LabradServer):
 
 	sPrefix = 704000
 	signal__reg_channel_added   = Signal(sPrefix+0,"signal__reg_channel_added" , "*s") # Activated when a new channel is added; parameters = [ID,name]
-	signal__reg_channel_deleted = Signal(sPrefix+1,"signal__reg_chanel_deleted", "*s") # Activated when a channel is deleted  ; parameters = [ID,name]
+	signal__reg_channel_deleted = Signal(sPrefix+1,"signal__reg_channel_deleted", "*s") # Activated when a channel is deleted  ; parameters = [ID,name]
 	signal__channel_set         = Signal(sPrefix+2,"signal__channel_set"       , "*s") # Activated when a channel is set      ; parameters = [ID,name,response]
 	signal__channel_get         = Signal(sPrefix+3,"signal__channel_get"       , "(ssv)") # Activated when a channel is gotten   ; parameters = [ID,name,response]
 
@@ -514,7 +514,7 @@ class VirtualDeviceServer(LabradServer):
 		del self.channels_by_name[name]
 		del self.channels_by_id[ID]	
 
-		self.signal__reg_chanel_deleted([ID,name])
+		self.signal__reg_channel_deleted([ID,name])
 		returnValue(True)
 
 	@setting(100,"list channels",returns='**s')
@@ -642,7 +642,7 @@ class VirtualDeviceServer(LabradServer):
 
 	@setting(1000,"set channel",ID='s',name='s',value='v',returns='s{response}')
 	def set_channel(self,c,value,ID,name=""):
-		"""Set the output of a channel. \nChanel specified by name and/or ID. \nOutput specified by value"""
+		"""Set the output of a channel. \nChannel specified by name and/or ID. \nOutput specified by value"""
 
 		# How do we tell if a channel is active? Corresponding server, and corresponding device
 		# Error if accesing inactive channel?
