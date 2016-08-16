@@ -529,7 +529,7 @@ class VirtualDeviceServer(LabradServer):
 
 	@setting(102,"list channel details",ID='s',name='s',returns='(ssss*sbb*s*?*s*sis*?*svvvv)')
 	def list_channel_details(self,c,ID,name=""):
-		"""Returns the details of a given channel in the form of a list (ID,name,label,description,tags,has_get,has_set,get_setting,get_inputs,get_inputs_units,set_setting,ste_var_slot,set_var_units,set_statics,set_statics_units,set_min,set_max,set_offset,set_scale)"""
+		"""Returns the details of a given channel in the form of a list (ID,name,label,description,tags,has_get,has_set,get_setting,get_inputs,get_inputs_units,set_setting,set_var_slot,set_var_units,set_statics,set_statics_units,set_min,set_max,set_offset,set_scale)"""
 		channel = yield self.get_channel_by_id_name(ID,name)
 		returnValue([
 			channel.ID,
