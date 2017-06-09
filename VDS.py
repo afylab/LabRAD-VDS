@@ -102,9 +102,9 @@ class ChannelInstance(object):
 def to_type(value,type_):
 	if type_.startswith('.'):return Value(value,type_[1:])
 	if type_ in ['string','str','s']  : return str(value)
-	if type_ in ['float','f','v']	 : return float(value)
+	if type_ in ['float','f','v','']  : return float(value)
 	if type_ in ['integer','int','i'] : return int(value)
-	return Value(value,_type)
+	return Value(value,type_)
 
 def assemble_set_list(set_var_slot,set_var_value,set_statics):
 	if set_var_slot > len(set_statics):raise ValueError("Variable slot ({set_var_slot}) higher than highest input slot ({h_slot})".format(set_var_slot=set_var_slot,h_slot=len(set_statics)))
@@ -661,7 +661,10 @@ class VirtualDeviceServer(LabradServer):
 		set_var_value = (value * channel.set_scale) + channel.set_offset
 		if set_var_value > channel.set_max:raise ValueError("value set (raw:{value}, adjusted:{set_var_value}) exceeds max value:{max}".format(value=value,set_var_value=set_var_value,max=channel.set_max))
 		if set_var_value < channel.set_min:raise ValueError("value set (raw:{value}, adjusted:{set_var_value}) deceeds min value:{min}".format(value=value,set_var_value=set_var_value,min=channel.set_min))
-
+		
+		units = channel.set_var_units
+		set_var_value = to_type(set_var_value,units)
+		
 		if len(channel.set_statics) == 0:
 			try: # first we try to send the setting in the channel's context.
 				ret = yield self.client[channel.set_setting[0]][channel.set_setting[2]](set_var_value,context=channel.context)
@@ -709,8 +712,9 @@ class VirtualDeviceServer(LabradServer):
 				ret = yield self.client[channel.get_setting[0]][channel.get_setting[2]](channel.get_inputs,context=channel.context)
 				yield self.client[channel.get_setting[0]].select_device(channel.get_setting[1],context=channel.context)
 
-		self.signal__channel_get([channel.ID,channel.name,float(ret)])
-		returnValue(float(ret))
+		ret = ret._value if type(ret) is units.Value else ret
+		self.signal__channel_get([channel.ID,channel.name,ret])
+		returnValue(ret)
 
 
 
